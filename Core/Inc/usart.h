@@ -31,6 +31,8 @@ extern "C" {
 /* USER CODE BEGIN Includes */
 
 /* USER CODE END Includes */
+/* In usart.h - add these */
+
 
 extern UART_HandleTypeDef huart2;
 
