@@ -137,13 +137,18 @@ int main(void)
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
-MX_GPIO_Init();
-MX_USART2_UART_Init();
-
-// Print before any sensor interaction
-// Can't printf yet since UART just init'd, add a small delay
-HAL_Delay(100);
-
+  MX_GPIO_Init();
+  MX_I2C1_Init();
+  MX_USART2_UART_Init();
+  MX_I2C2_Init();
+  MX_USART3_UART_Init();
+  /* USER CODE BEGIN 2 */
+// HAL_GPIO_WritePin(PWREN_L_GPIO_Port,   PWREN_L_Pin,   GPIO_PIN_SET);
+// HAL_GPIO_WritePin(PWREN_R_GPIO_Port,   PWREN_R_Pin,   GPIO_PIN_SET);
+// HAL_GPIO_WritePin(I2C_RST_L_GPIO_Port, I2C_RST_L_Pin, GPIO_PIN_SET);
+// HAL_GPIO_WritePin(I2C_RST_R_GPIO_Port, I2C_RST_R_Pin, GPIO_PIN_SET);
+// HAL_GPIO_WritePin(LPn_L_GPIO_Port,     LPn_L_Pin,     GPIO_PIN_SET);
+// HAL_GPIO_WritePin(LPn_R_GPIO_Port,     LPn_R_Pin,     GPIO_PIN_SET);
 HAL_GPIO_WritePin(PWREN_L_GPIO_Port,   PWREN_L_Pin,   GPIO_PIN_SET);
 HAL_GPIO_WritePin(I2C_RST_L_GPIO_Port, I2C_RST_L_Pin, GPIO_PIN_SET);  // hold in reset
 HAL_GPIO_WritePin(LPn_L_GPIO_Port,     LPn_L_Pin,     GPIO_PIN_RESET);
@@ -151,18 +156,6 @@ HAL_Delay(100);
 HAL_GPIO_WritePin(I2C_RST_L_GPIO_Port, I2C_RST_L_Pin, GPIO_PIN_RESET); // release reset
 HAL_GPIO_WritePin(LPn_L_GPIO_Port,     LPn_L_Pin,     GPIO_PIN_SET);
 HAL_Delay(2000);
-
-MX_I2C2_Init();
-
-HAL_Delay(1000);
-
- /* USER CODE BEGIN 2 */
-// HAL_GPIO_WritePin(PWREN_L_GPIO_Port,   PWREN_L_Pin,   GPIO_PIN_SET);
-// HAL_GPIO_WritePin(PWREN_R_GPIO_Port,   PWREN_R_Pin,   GPIO_PIN_SET);
-// HAL_GPIO_WritePin(I2C_RST_L_GPIO_Port, I2C_RST_L_Pin, GPIO_PIN_SET);
-// HAL_GPIO_WritePin(I2C_RST_R_GPIO_Port, I2C_RST_R_Pin, GPIO_PIN_SET);
-// HAL_GPIO_WritePin(LPn_L_GPIO_Port,     LPn_L_Pin,     GPIO_PIN_SET);
-// HAL_GPIO_WritePin(LPn_R_GPIO_Port,     LPn_R_Pin,     GPIO_PIN_SET);
 
 // Sensor A only
 sensor_a.platform.address  = 0x52;
@@ -221,8 +214,7 @@ if (status == VL53L7CX_STATUS_OK) {
     printf("Sensor B failed!\r\n");
 }
 
-/* USER CODE END 2 */
-
+  /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -246,10 +238,10 @@ while (!ready_a) {
     HAL_Delay(5);
 }
 vl53l7cx_get_ranging_data(&sensor_a, &results_a);
-// printf("A");
-// for (int i = 0; i < 16; i++) printf(",%d", (int)results_a.distance_mm[i]);
-// for (int i = 0; i < 16; i++) printf(",%u", (unsigned)results_a.target_status[i]);
-// printf("\r\n");
+printf("A");
+for (int i = 0; i < 16; i++) printf(",%d", (int)results_a.distance_mm[i]);
+for (int i = 0; i < 16; i++) printf(",%u", (unsigned)results_a.target_status[i]);
+printf("\r\n");
 int a_target = 0;
 int cnt = 0;
 int valid_targets[16];
@@ -271,10 +263,10 @@ while (!ready_b) {
     HAL_Delay(5);
 }
 vl53l7cx_get_ranging_data(&sensor_b, &results_b);
-// printf("B");
-// for (int i = 0; i < 16; i++) printf(",%d", (int)results_b.distance_mm[i]);
-// for (int i = 0; i < 16; i++) printf(",%u", (unsigned)results_b.target_status[i]);
-// printf("\r\n");
+printf("B");
+for (int i = 0; i < 16; i++) printf(",%d", (int)results_b.distance_mm[i]);
+for (int i = 0; i < 16; i++) printf(",%u", (unsigned)results_b.target_status[i]);
+printf("\r\n");
 int b_target = 0;
 cnt = 0;
 for (int i = 0; i < 16; i++) {
@@ -313,7 +305,7 @@ memcpy(&buf[1], &x, 4);    // 4 bytes of float x
 memcpy(&buf[5], &y, 4);    // 4 bytes of float y
 buf[9] = 0xFF;              // end marker
 
-HAL_UART_Transmit(&huart2, buf, 10, HAL_MAX_DELAY);
+HAL_UART_Transmit(&huart3, buf, 10, HAL_MAX_DELAY);
 
 // uint8_t buf[10];
 // HAL_UART_Receive(&huart1, buf, 10, HAL_MAX_DELAY);
@@ -324,10 +316,9 @@ HAL_UART_Transmit(&huart2, buf, 10, HAL_MAX_DELAY);
 //     memcpy(&y, &buf[5], 4);
 // }
 
-/* USER CODE END 3 */
+  /* USER CODE END 3 */
 }
 }
-
 /**
   * @brief System Clock Configuration
   * @retval None
