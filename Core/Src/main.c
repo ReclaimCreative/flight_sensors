@@ -63,49 +63,90 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-void I2C_Scan(void) {
-    printf("Scanning I2C bus...\r\n");
-    HAL_Delay(100);
+void I2C_Scan(I2C_HandleTypeDef *hi2c, const char *label) {
+    printf("Scanning %s...\r\n", label);
     int found = 0;
     for (uint16_t addr = 1; addr < 128; addr++) {
-        HAL_StatusTypeDef result = HAL_I2C_IsDeviceReady(&hi2c2, addr << 1, 5, 100);
+        HAL_StatusTypeDef result = HAL_I2C_IsDeviceReady(hi2c, addr << 1, 5, 100);
         if (result == HAL_OK) {
-            printf("Device found at 0x%02X (8-bit: 0x%02X)\r\n", (unsigned)addr, (unsigned)(addr << 1));
+            printf("Found at 0x%02X (8-bit: 0x%02X)\r\n", (unsigned)addr, (unsigned)(addr << 1));
             found++;
-        } else {
-            printf("Bus busy at 0x%02X\r\n", (unsigned)addr);
         }
     }
-    if (!found) printf("No devices found.\r\n");
+    if (!found) printf("No devices found on %s\r\n", label);
     printf("Scan complete.\r\n");
 }
 void I2C_Recover(void) {
-    HAL_I2C_DeInit(&hi2c1);
-    
+
+    // ---- I2C2 recovery (sensor A — PB10=SCL, PB11=SDA) ----
+    HAL_I2C_DeInit(&hi2c2);
+
     GPIO_InitTypeDef GPIO_InitStruct = {0};
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+
+    // Hold sensor A in reset so it doesn't fight the bus
+    HAL_GPIO_WritePin(I2C_RST_L_GPIO_Port, I2C_RST_L_Pin, GPIO_PIN_RESET);
+
+    GPIO_InitStruct.Pin = GPIO_PIN_10 | GPIO_PIN_11;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    // Release both lines high
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10 | GPIO_PIN_11, GPIO_PIN_SET);
+    HAL_Delay(10);
+
+    // Clock out 9 pulses to release any stuck slave
+    for (int i = 0; i < 9; i++) {
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_RESET);
+        HAL_Delay(1);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_SET);
+        HAL_Delay(1);
+    }
+    // Generate STOP condition — SDA low then high while SCL high
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_RESET);
+    HAL_Delay(1);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_SET);
+    HAL_Delay(10);
+
+    MX_I2C2_Init();
+    HAL_Delay(100);
+
+    // ---- I2C1 recovery (sensor B — PB6=SCL, PB7=SDA) ----
+    HAL_I2C_DeInit(&hi2c1);
+
+    // Hold sensor B in reset
+    HAL_GPIO_WritePin(I2C_RST_R_GPIO_Port, I2C_RST_R_Pin, GPIO_PIN_RESET);
+
     GPIO_InitStruct.Pin = GPIO_PIN_6 | GPIO_PIN_7;
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-    
+
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6 | GPIO_PIN_7, GPIO_PIN_SET);
     HAL_Delay(10);
-    
+
     for (int i = 0; i < 9; i++) {
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
         HAL_Delay(1);
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
         HAL_Delay(1);
     }
+    // Generate STOP condition
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
     HAL_Delay(1);
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);
     HAL_Delay(10);
-    
-    MX_I2C2_Init();
+
+    MX_I2C1_Init();
     HAL_Delay(100);
+
+    // Release both sensors from reset after bus is clean
+    HAL_GPIO_WritePin(I2C_RST_L_GPIO_Port, I2C_RST_L_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(I2C_RST_R_GPIO_Port, I2C_RST_R_Pin, GPIO_PIN_SET);
+    HAL_Delay(10);
 }
 /* USER CODE END 0 */
 
@@ -138,17 +179,23 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_I2C1_Init();
+
   MX_USART2_UART_Init();
-  MX_I2C2_Init();
+
+
   MX_USART3_UART_Init();
-  /* USER CODE BEGIN 2 */
-// HAL_GPIO_WritePin(PWREN_L_GPIO_Port,   PWREN_L_Pin,   GPIO_PIN_SET);
-// HAL_GPIO_WritePin(PWREN_R_GPIO_Port,   PWREN_R_Pin,   GPIO_PIN_SET);
-// HAL_GPIO_WritePin(I2C_RST_L_GPIO_Port, I2C_RST_L_Pin, GPIO_PIN_SET);
-// HAL_GPIO_WritePin(I2C_RST_R_GPIO_Port, I2C_RST_R_Pin, GPIO_PIN_SET);
-// HAL_GPIO_WritePin(LPn_L_GPIO_Port,     LPn_L_Pin,     GPIO_PIN_SET);
-// HAL_GPIO_WritePin(LPn_R_GPIO_Port,     LPn_R_Pin,     GPIO_PIN_SET);
+
+   /* USER CODE BEGIN 2 */
+// Bring sensor B up
+HAL_GPIO_WritePin(PWREN_R_GPIO_Port,   PWREN_R_Pin,   GPIO_PIN_SET);
+HAL_GPIO_WritePin(I2C_RST_R_GPIO_Port, I2C_RST_R_Pin, GPIO_PIN_SET);  // hold in reset
+HAL_GPIO_WritePin(LPn_R_GPIO_Port,     LPn_R_Pin,     GPIO_PIN_RESET);
+HAL_Delay(100);
+HAL_GPIO_WritePin(I2C_RST_R_GPIO_Port, I2C_RST_R_Pin, GPIO_PIN_RESET); // release reset
+HAL_GPIO_WritePin(LPn_R_GPIO_Port,     LPn_R_Pin,     GPIO_PIN_SET);
+HAL_Delay(2000);
+
+
 HAL_GPIO_WritePin(PWREN_L_GPIO_Port,   PWREN_L_Pin,   GPIO_PIN_SET);
 HAL_GPIO_WritePin(I2C_RST_L_GPIO_Port, I2C_RST_L_Pin, GPIO_PIN_SET);  // hold in reset
 HAL_GPIO_WritePin(LPn_L_GPIO_Port,     LPn_L_Pin,     GPIO_PIN_RESET);
@@ -156,10 +203,19 @@ HAL_Delay(100);
 HAL_GPIO_WritePin(I2C_RST_L_GPIO_Port, I2C_RST_L_Pin, GPIO_PIN_RESET); // release reset
 HAL_GPIO_WritePin(LPn_L_GPIO_Port,     LPn_L_Pin,     GPIO_PIN_SET);
 HAL_Delay(2000);
+printf("Pins set");
+printf("\r\n");
 
+MX_I2C1_Init();
+MX_I2C2_Init();
+I2C_Scan(&hi2c1, "I2C1");
+I2C_Scan(&hi2c2, "I2C2"); 
+
+ while(1) {}
+ 
 // Sensor A only
 sensor_a.platform.address  = 0x52;
-sensor_a.platform.hi2c     = &hi2c2;
+sensor_a.platform.hi2c     = &hi2c1;
 sensor_a.platform.lpn_port = LPn_L_GPIO_Port;
 sensor_a.platform.lpn_pin  = LPn_L_Pin;
 
@@ -180,20 +236,12 @@ if (status == VL53L7CX_STATUS_OK) {
 }
 
 
-// Bring sensor B up
-HAL_GPIO_WritePin(PWREN_R_GPIO_Port,   PWREN_R_Pin,   GPIO_PIN_SET);
-HAL_GPIO_WritePin(I2C_RST_R_GPIO_Port, I2C_RST_R_Pin, GPIO_PIN_SET);  // hold in reset
-HAL_GPIO_WritePin(LPn_R_GPIO_Port,     LPn_R_Pin,     GPIO_PIN_RESET);
-HAL_Delay(100);
-HAL_GPIO_WritePin(I2C_RST_R_GPIO_Port, I2C_RST_R_Pin, GPIO_PIN_RESET); // release reset
-HAL_GPIO_WritePin(LPn_R_GPIO_Port,     LPn_R_Pin,     GPIO_PIN_SET);
-HAL_Delay(2000);
 
-MX_I2C1_Init();
-HAL_Delay(1000);
 
+
+  MX_I2C2_Init();
 sensor_b.platform.address  = 0x52;
-sensor_b.platform.hi2c     = &hi2c1;
+sensor_b.platform.hi2c     = &hi2c2;
 sensor_b.platform.lpn_port = LPn_R_GPIO_Port;
 sensor_b.platform.lpn_pin  = LPn_R_Pin;
 
@@ -218,7 +266,7 @@ if (status == VL53L7CX_STATUS_OK) {
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  float d = 220.0f;
+  float d = 240.0f;
   float two_d = 2.0f * d;
   float d_squared = d * d;
   float x, y;
@@ -238,14 +286,14 @@ while (!ready_a) {
     HAL_Delay(5);
 }
 vl53l7cx_get_ranging_data(&sensor_a, &results_a);
-printf("A");
-for (int i = 0; i < 16; i++) printf(",%d", (int)results_a.distance_mm[i]);
-for (int i = 0; i < 16; i++) printf(",%u", (unsigned)results_a.target_status[i]);
-printf("\r\n");
+// printf("A");
+// for (int i = 0; i < 16; i++) printf(",%d", (int)results_a.distance_mm[i]);
+// for (int i = 0; i < 16; i++) printf(",%u", (unsigned)results_a.target_status[i]);
+// printf("\r\n");
 int a_target = 0;
 int cnt = 0;
 int valid_targets[16];
-for (int i = 0; i < 16; i++) {
+for (int i = 8; i < 11; i++) {
       if (results_a.distance_mm[i] > 80 && results_a.distance_mm[i] <= 500) {
           
             valid_targets[cnt++] = results_a.distance_mm[i];
@@ -263,13 +311,13 @@ while (!ready_b) {
     HAL_Delay(5);
 }
 vl53l7cx_get_ranging_data(&sensor_b, &results_b);
-printf("B");
-for (int i = 0; i < 16; i++) printf(",%d", (int)results_b.distance_mm[i]);
-for (int i = 0; i < 16; i++) printf(",%u", (unsigned)results_b.target_status[i]);
-printf("\r\n");
+// printf("B");
+// for (int i = 0; i < 16; i++) printf(",%d", (int)results_b.distance_mm[i]);
+// for (int i = 0; i < 16; i++) printf(",%u", (unsigned)results_b.target_status[i]);
+// printf("\r\n");
 int b_target = 0;
 cnt = 0;
-for (int i = 0; i < 16; i++) {
+for (int i = 8; i < 11; i++) {
       if (results_b.distance_mm[i] > 80 && results_b.distance_mm[i] <= 500) {
           
             valid_targets[cnt++] = results_b.distance_mm[i];
@@ -291,13 +339,13 @@ sin_A = sqrtf(1.0f - cos_A * cos_A);
 x = a_target * cos_A;
 y = a_target * sin_A;
 
-// Temporary integer debug to confirm values are correct
+//Temporary integer debug to confirm values are correct
 int cos_scaled = (int)(cos_A * 10000);
 int sin_scaled = (int)(sin_A * 10000);
 int x_scaled = (int)x;
 int y_scaled = (int)y;
-// printf("debug: cosA=%d sinA=%d x=%d y=%d\r\n", 
-//        cos_scaled, sin_scaled, x_scaled, y_scaled);
+printf("debug: cosA=%d sinA=%d x=%d y=%d\r\n", 
+       cos_scaled, sin_scaled, x_scaled, y_scaled);
 
 
 buf[0] = 0xAA;              // start marker
@@ -307,14 +355,14 @@ buf[9] = 0xFF;              // end marker
 
 HAL_UART_Transmit(&huart3, buf, 10, HAL_MAX_DELAY);
 
-// uint8_t buf[10];
-// HAL_UART_Receive(&huart1, buf, 10, HAL_MAX_DELAY);
+  // uint8_t buf[10];
+  // HAL_UART_Receive(&huart1, buf, 10, HAL_MAX_DELAY);
 
-// if (buf[0] == 0xAA && buf[9] == 0xFF) {
-//     float x, y;
-//     memcpy(&x, &buf[1], 4);
-//     memcpy(&y, &buf[5], 4);
-// }
+  // if (buf[0] == 0xAA && buf[9] == 0xFF) {
+  //     float x, y;
+  //     memcpy(&x, &buf[1], 4);
+  //     memcpy(&y, &buf[5], 4);
+  // }
 
   /* USER CODE END 3 */
 }
