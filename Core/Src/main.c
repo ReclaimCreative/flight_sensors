@@ -201,7 +201,7 @@ sensor_a.platform.address  = 0x52;
 sensor_a.platform.hi2c     = &hi2c2;
 sensor_a.platform.lpn_port = LPn_L_GPIO_Port;
 sensor_a.platform.lpn_pin  = LPn_L_Pin;
-MX_I2C1_Init();
+MX_I2C2_Init();
 uint8_t is_alive = 0;
 vl53l7cx_is_alive(&sensor_a, &is_alive);
 printf("alive=%d\r\n", is_alive);
@@ -225,14 +225,16 @@ HAL_Delay(100);
 HAL_GPIO_WritePin(I2C_RST_R_GPIO_Port, I2C_RST_R_Pin, GPIO_PIN_RESET); // release reset
 HAL_GPIO_WritePin(LPn_R_GPIO_Port,     LPn_R_Pin,     GPIO_PIN_SET);
 HAL_Delay(2000);
-MX_I2C2_Init();
+
 
 sensor_b.platform.address  = 0x52;
 sensor_b.platform.hi2c     = &hi2c1;
 sensor_b.platform.lpn_port = LPn_R_GPIO_Port;
 sensor_b.platform.lpn_pin  = LPn_R_Pin;
-
-
+MX_I2C1_Init();
+printf("I2C1 state: %d\r\n", hi2c1.State);
+printf("I2C1 error: %lu\r\n", hi2c1.ErrorCode);
+I2C_Scan(&hi2c1, "I2C1");
 uint8_t is_alive_b = 0;
 status = vl53l7cx_is_alive(&sensor_b, &is_alive_b);
 printf("Sensor B alive: status=%d alive=%d\r\n", status, is_alive_b);
@@ -250,19 +252,11 @@ if (status == VL53L7CX_STATUS_OK) {
     printf("Sensor B failed!\r\n");
 }
 
-
-
-
-
-
-
-
-
-  /* USER CODE END 2 */
+/* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  float d = 240.0f;
+  float d = 490.0f;
   float two_d = 2.0f * d;
   float d_squared = d * d;
   float x, y;
@@ -271,6 +265,7 @@ if (status == VL53L7CX_STATUS_OK) {
   while (1)
 {
     /* USER CODE END WHILE */
+
 
     /* USER CODE BEGIN 3 */
 
@@ -282,15 +277,15 @@ while (!ready_a) {
     HAL_Delay(5);
 }
 vl53l7cx_get_ranging_data(&sensor_a, &results_a);
-// printf("A");
-// for (int i = 0; i < 16; i++) printf(",%d", (int)results_a.distance_mm[i]);
-// for (int i = 0; i < 16; i++) printf(",%u", (unsigned)results_a.target_status[i]);
-// printf("\r\n");
+printf("A");
+for (int i = 0; i < 16; i++) printf(",%d", (int)results_a.distance_mm[i]);
+for (int i = 0; i < 16; i++) printf(",%u", (unsigned)results_a.target_status[i]);
+printf("\r\n");
 int a_target = 0;
 int cnt = 0;
 int valid_targets[16];
 for (int i = 8; i < 11; i++) {
-      if (results_a.distance_mm[i] > 80 && results_a.distance_mm[i] <= 500) {
+      if (results_a.distance_mm[i] > 200 && results_a.distance_mm[i] <= 550) {
           
             valid_targets[cnt++] = results_a.distance_mm[i];
 
@@ -300,21 +295,21 @@ for (int i = 8; i < 11; i++) {
 int total = 0;
 for (int i = 0; i < cnt; i++) total += valid_targets[i];
 a_target = (cnt > 0) ? total / cnt : 0;
-// printf("A target: %d\r\n", a_target);
+printf("A target: %d\r\n", a_target);
 
 while (!ready_b) {
     vl53l7cx_check_data_ready(&sensor_b, &ready_b);
     HAL_Delay(5);
 }
 vl53l7cx_get_ranging_data(&sensor_b, &results_b);
-// printf("B");
-// for (int i = 0; i < 16; i++) printf(",%d", (int)results_b.distance_mm[i]);
-// for (int i = 0; i < 16; i++) printf(",%u", (unsigned)results_b.target_status[i]);
-// printf("\r\n");
+printf("B");
+for (int i = 0; i < 16; i++) printf(",%d", (int)results_b.distance_mm[i]);
+for (int i = 0; i < 16; i++) printf(",%u", (unsigned)results_b.target_status[i]);
+printf("\r\n");
 int b_target = 0;
 cnt = 0;
 for (int i = 8; i < 11; i++) {
-      if (results_b.distance_mm[i] > 80 && results_b.distance_mm[i] <= 500) {
+      if (results_b.distance_mm[i] > 200 && results_b.distance_mm[i] <= 550) {
           
             valid_targets[cnt++] = results_b.distance_mm[i];
       }
@@ -323,7 +318,7 @@ total = 0;
 for (int i = 0; i < cnt; i++) total += valid_targets[i];
 b_target = (cnt > 0) ? total / cnt : 0;
 // printf("B target: %d\r\n", b_target);
-// // ADD THIS:
+
 // printf("debug: a=%d b=%d\r\n", a_target, b_target);
 
 cos_A = (float)(d_squared + a_target*a_target - b_target*b_target) / (float)(two_d * a_target);
@@ -340,8 +335,8 @@ int cos_scaled = (int)(cos_A * 10000);
 int sin_scaled = (int)(sin_A * 10000);
 int x_scaled = (int)x;
 int y_scaled = (int)y;
-printf("debug: cosA=%d sinA=%d x=%d y=%d\r\n", 
-       cos_scaled, sin_scaled, x_scaled, y_scaled);
+// printf("debug: cosA=%d sinA=%d x=%d y=%d\r\n", 
+//        cos_scaled, sin_scaled, x_scaled, y_scaled);
 
 
 buf[0] = 0xAA;              // start marker
@@ -359,7 +354,7 @@ HAL_UART_Transmit(&huart3, buf, 10, HAL_MAX_DELAY);
   //     memcpy(&x, &buf[1], 4);
   //     memcpy(&y, &buf[5], 4);
   // }
-
+HAL_Delay(100);
   /* USER CODE END 3 */
 }
 }
