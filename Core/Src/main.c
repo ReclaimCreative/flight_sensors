@@ -87,7 +87,7 @@ void I2C_Recover(void) {
     // Hold sensor A in reset so it doesn't fight the bus
     HAL_GPIO_WritePin(I2C_RST_L_GPIO_Port, I2C_RST_L_Pin, GPIO_PIN_RESET);
 
-    GPIO_InitStruct.Pin = GPIO_PIN_10 | GPIO_PIN_11;
+    GPIO_InitStruct.Pin = GPIO_PIN_8 | GPIO_PIN_9;
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -99,15 +99,15 @@ void I2C_Recover(void) {
 
     // Clock out 9 pulses to release any stuck slave
     for (int i = 0; i < 9; i++) {
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
         HAL_Delay(1);
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_SET);
         HAL_Delay(1);
     }
     // Generate STOP condition — SDA low then high while SCL high
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);
     HAL_Delay(1);
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);
     HAL_Delay(10);
 
     MX_I2C2_Init();
@@ -184,18 +184,9 @@ int main(void)
 
 
   MX_USART3_UART_Init();
-
+  
    /* USER CODE BEGIN 2 */
-// Bring sensor B up
-HAL_GPIO_WritePin(PWREN_R_GPIO_Port,   PWREN_R_Pin,   GPIO_PIN_SET);
-HAL_GPIO_WritePin(I2C_RST_R_GPIO_Port, I2C_RST_R_Pin, GPIO_PIN_SET);  // hold in reset
-HAL_GPIO_WritePin(LPn_R_GPIO_Port,     LPn_R_Pin,     GPIO_PIN_RESET);
-HAL_Delay(100);
-HAL_GPIO_WritePin(I2C_RST_R_GPIO_Port, I2C_RST_R_Pin, GPIO_PIN_RESET); // release reset
-HAL_GPIO_WritePin(LPn_R_GPIO_Port,     LPn_R_Pin,     GPIO_PIN_SET);
-HAL_Delay(2000);
-
-
+   
 HAL_GPIO_WritePin(PWREN_L_GPIO_Port,   PWREN_L_Pin,   GPIO_PIN_SET);
 HAL_GPIO_WritePin(I2C_RST_L_GPIO_Port, I2C_RST_L_Pin, GPIO_PIN_SET);  // hold in reset
 HAL_GPIO_WritePin(LPn_L_GPIO_Port,     LPn_L_Pin,     GPIO_PIN_RESET);
@@ -203,22 +194,14 @@ HAL_Delay(100);
 HAL_GPIO_WritePin(I2C_RST_L_GPIO_Port, I2C_RST_L_Pin, GPIO_PIN_RESET); // release reset
 HAL_GPIO_WritePin(LPn_L_GPIO_Port,     LPn_L_Pin,     GPIO_PIN_SET);
 HAL_Delay(2000);
-printf("Pins set");
-printf("\r\n");
 
-MX_I2C1_Init();
-MX_I2C2_Init();
-I2C_Scan(&hi2c1, "I2C1");
-I2C_Scan(&hi2c2, "I2C2"); 
 
- while(1) {}
- 
 // Sensor A only
 sensor_a.platform.address  = 0x52;
-sensor_a.platform.hi2c     = &hi2c1;
+sensor_a.platform.hi2c     = &hi2c2;
 sensor_a.platform.lpn_port = LPn_L_GPIO_Port;
 sensor_a.platform.lpn_pin  = LPn_L_Pin;
-
+MX_I2C1_Init();
 uint8_t is_alive = 0;
 vl53l7cx_is_alive(&sensor_a, &is_alive);
 printf("alive=%d\r\n", is_alive);
@@ -234,16 +217,21 @@ if (status == VL53L7CX_STATUS_OK) {
     vl53l7cx_start_ranging(&sensor_a);
     printf("A ranging\r\n");
 }
+// Bring sensor B up
+HAL_GPIO_WritePin(PWREN_R_GPIO_Port,   PWREN_R_Pin,   GPIO_PIN_SET);
+HAL_GPIO_WritePin(I2C_RST_R_GPIO_Port, I2C_RST_R_Pin, GPIO_PIN_SET);  // hold in reset
+HAL_GPIO_WritePin(LPn_R_GPIO_Port,     LPn_R_Pin,     GPIO_PIN_RESET);
+HAL_Delay(100);
+HAL_GPIO_WritePin(I2C_RST_R_GPIO_Port, I2C_RST_R_Pin, GPIO_PIN_RESET); // release reset
+HAL_GPIO_WritePin(LPn_R_GPIO_Port,     LPn_R_Pin,     GPIO_PIN_SET);
+HAL_Delay(2000);
+MX_I2C2_Init();
 
-
-
-
-
-  MX_I2C2_Init();
 sensor_b.platform.address  = 0x52;
-sensor_b.platform.hi2c     = &hi2c2;
+sensor_b.platform.hi2c     = &hi2c1;
 sensor_b.platform.lpn_port = LPn_R_GPIO_Port;
 sensor_b.platform.lpn_pin  = LPn_R_Pin;
+
 
 uint8_t is_alive_b = 0;
 status = vl53l7cx_is_alive(&sensor_b, &is_alive_b);
@@ -261,6 +249,14 @@ if (status == VL53L7CX_STATUS_OK) {
 } else {
     printf("Sensor B failed!\r\n");
 }
+
+
+
+
+
+
+
+
 
   /* USER CODE END 2 */
 
